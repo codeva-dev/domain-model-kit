@@ -1,0 +1,97 @@
+{
+  "name": "@codeva-dev/domain-model-kit",
+  "version": "0.1.0-alpha.0",
+  "description": "Domain encapsulation and domain-event persistence toolkit for TypeScript with pure, neverthrow, and Effect implementations.",
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/codeva-dev/domain-model-kit.git",
+    "directory": "packages/ddd"
+  },
+  "bugs": {
+    "url": "https://github.com/codeva-dev/domain-model-kit/issues"
+  },
+  "homepage": "https://github.com/codeva-dev/domain-model-kit#readme",
+  "keywords": [
+    "domain-encapsulation",
+    "domain-inspired",
+    "domain-model",
+    "typescript",
+    "effect",
+    "neverthrow",
+    "zod"
+  ],
+  "sideEffects": false,
+  "publishConfig": {
+    "access": "public",
+    "tag": "alpha"
+  },
+  "files": [
+    "dist",
+    "src/examples",
+    "README.md",
+    "LICENSE"
+  ],
+  "exports": {
+    "./pure": {
+      "types": "./dist/pure/index.d.ts",
+      "default": "./dist/pure/index.js"
+    },
+    "./neverthrow": {
+      "types": "./dist/neverthrow/index.d.ts",
+      "default": "./dist/neverthrow/index.js"
+    },
+    "./effect": {
+      "types": "./dist/effect/index.d.ts",
+      "default": "./dist/effect/index.js"
+    }
+  },
+  "typesVersions": {
+    "*": {
+      "pure": [
+        "./dist/pure/index.d.ts"
+      ],
+      "neverthrow": [
+        "./dist/neverthrow/index.d.ts"
+      ],
+      "effect": [
+        "./dist/effect/index.d.ts"
+      ]
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run --coverage",
+    "test:watch": "vitest",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck:test": "tsc -p tsconfig.test.json --noEmit",
+    "prepack": "npm run build"
+  },
+  "peerDependencies": {
+    "effect": "^3.21.2",
+    "neverthrow": "^8.2.0",
+    "zod": "^4.4.1"
+  },
+  "peerDependenciesMeta": {
+    "effect": {
+      "optional": true
+    },
+    "neverthrow": {
+      "optional": true
+    },
+    "zod": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@effect/vitest": "^0.29.0",
+    "@types/node": "^20.11.17",
+    "@vitest/coverage-v8": "^3.2.4",
+    "effect": "^3.21.2",
+    "neverthrow": "^8.2.0",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4",
+    "zod": "^4.4.1"
+  }
+}

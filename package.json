@@ -1,0 +1,34 @@
+{
+	"name": "codeva-dev-domain-model-kit-monorepo",
+	"version": "0.0.0",
+	"type": "module",
+	"private": true,
+	"packageManager": "npm@11.6.2",
+	"workspaces": [
+		"packages/*",
+		"apps/*"
+	],
+	"scripts": {
+		"dev": "npm run dev -w @codeva-dev/domain-model-kit-playground",
+		"build": "npm run build --workspaces --if-present",
+		"typecheck": "npm run typecheck --workspaces --if-present",
+		"build:domain-model-kit": "npm run build -w @codeva-dev/domain-model-kit",
+		"typecheck:domain-model-kit": "npm run typecheck -w @codeva-dev/domain-model-kit",
+		"typecheck:domain-model-kit-tests": "npm run typecheck:test -w @codeva-dev/domain-model-kit",
+		"test:domain-model-kit": "npm run test -w @codeva-dev/domain-model-kit",
+		"build:playground": "npm run build -w @codeva-dev/domain-model-kit-playground",
+		"typecheck:playground": "npm run typecheck -w @codeva-dev/domain-model-kit-playground",
+		"start:playground": "npm run start -w @codeva-dev/domain-model-kit-playground",
+		"version:packages": "lerna version",
+		"version:alpha": "lerna version prerelease --preid alpha",
+		"publish:packages": "lerna publish from-package",
+		"publish:alpha": "lerna publish from-package --dist-tag alpha",
+		"pack:domain-model-kit": "npm pack --dry-run -w @codeva-dev/domain-model-kit --cache /tmp/npm-cache-domain-model-kit"
+	},
+	"devDependencies": {
+		"@types/node": "^20.11.17",
+		"lerna": "^8.2.4",
+		"tsx": "^4.7.1",
+		"typescript": "^5.8.3"
+	}
+}

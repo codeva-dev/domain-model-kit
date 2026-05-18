@@ -1,0 +1,23 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "types": [
+      "node"
+    ]
+  },
+  "include": [
+    "src/pure/**/*.ts",
+    "src/neverthrow/**/*.ts",
+    "src/effect/**/*.ts"
+  ],
+  "exclude": [
+    "dist",
+    "node_modules",
+    "src/examples"
+  ]
+}
