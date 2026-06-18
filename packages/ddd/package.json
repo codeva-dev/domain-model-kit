@@ -1,6 +1,6 @@
 {
   "name": "@codeva-dev/domain-model-kit",
-  "version": "0.1.0-alpha.1",
+  "version": "0.1.0-alpha.2",
   "description": "Domain encapsulation and domain-event persistence toolkit for TypeScript with pure, neverthrow, and Effect implementations.",
   "type": "module",
   "license": "MIT",
