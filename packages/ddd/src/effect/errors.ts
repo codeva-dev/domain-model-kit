@@ -1,4 +1,4 @@
-import { Schema } from 'effect';
+import { Schema, type Cause } from 'effect';
 
 const defaultDomainErrorFields = {
 	message: Schema.String,
@@ -7,7 +7,7 @@ const defaultDomainErrorFields = {
 
 type DefaultDomainErrorFields = typeof defaultDomainErrorFields;
 export type DomainErrorInstance<TTag extends string, TFields extends Schema.Struct.Fields = DefaultDomainErrorFields> =
-	Schema.Struct.Type<TFields> & { readonly _tag: TTag };
+	Cause.YieldableError & Schema.Struct.Type<TFields> & { readonly _tag: TTag };
 export type DomainErrorClass<TTag extends string, TFields extends Schema.Struct.Fields = DefaultDomainErrorFields> = {
 	readonly _tag: TTag;
 	new (props: Schema.Struct.Constructor<TFields>): DomainErrorInstance<TTag, TFields>;

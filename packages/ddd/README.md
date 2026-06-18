@@ -626,10 +626,13 @@ Pure and neverthrow errors are independent `Error` subclasses with a string-lite
 Effect errors are independent `Schema.TaggedError` classes created with `DomainError.Class(...)`.
 
 ```ts
+import { Schema } from "effect"
+import { DomainError } from "@codeva-dev/domain-model-kit/effect"
+
 const OrderDomainError = DomainError.Class("OrderDomainError")
 type OrderDomainError = InstanceType<typeof OrderDomainError>
 
-yield* Effect.fail(new OrderDomainError({ message: "Order is invalid" }))
+yield* new OrderDomainError({ message: "Order is invalid" })
 ```
 
 Custom Effect error fields can be added with the same factory:
@@ -640,7 +643,7 @@ const OrderNotFound = DomainError.Class("OrderNotFound", {
   orderId: Schema.String,
 })
 
-yield* Effect.fail(new OrderNotFound({ message: "Order not found", orderId }))
+yield* new OrderNotFound({ message: "Order not found", orderId })
 ```
 
 There is no custom error inheritance hierarchy. The errors have matching conceptual shape, but they are implemented separately per implementation.

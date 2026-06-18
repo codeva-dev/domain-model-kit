@@ -151,15 +151,21 @@ describe('effect', () => {
 	);
 
 	it.effect('creates custom tagged domain errors', () =>
-		Effect.sync(() => {
+		Effect.gen(function* () {
 			const OrderNotFound = DomainError.Class('OrderNotFound', {
 				message: Schema.String,
 				orderId: Schema.String,
 			});
 			const error = new OrderNotFound({ message: 'Order not found', orderId: '1' });
+			const failed = yield* Effect.exit(
+				Effect.gen(function* () {
+					return yield* new OrderNotFound({ message: 'Order not found', orderId: '1' });
+				}),
+			);
 
 			expect(error._tag).toBe('OrderNotFound');
 			expect(error.orderId).toBe('1');
+			expect(Exit.isFailure(failed)).toBe(true);
 		}),
 	);
 
