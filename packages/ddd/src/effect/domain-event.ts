@@ -61,7 +61,7 @@ export abstract class DomainEventBase<
  */
 export type DomainEventClass<
 	TEvent extends DomainEventBase = DomainEventBase,
-	TPayload = TEvent extends DomainEventBase<string, infer TInferredPayload, unknown> ? TInferredPayload : unknown,
+	TPayload = any,
 > = {
 	readonly eventKey: TEvent['eventKey'];
 	readonly payloadSchema: Schema.Schema.Any;
@@ -97,8 +97,8 @@ function makeDomainEvent<const TEventKey extends string, const TPayloadSchema ex
 	eventKey: TEventKey,
 	payloadSchema: TPayloadSchema,
 ) {
-	type Payload = typeof payloadSchema.Type;
-	type EncodedPayload = typeof payloadSchema.Encoded;
+	type Payload = Schema.Schema.Type<TPayloadSchema>;
+	type EncodedPayload = Schema.Schema.Encoded<TPayloadSchema>;
 	const serializedSchema = Schema.Struct({
 		eventKey: Schema.Literal(eventKey),
 		instanceId: Schema.Union(Schema.String, Schema.Number),

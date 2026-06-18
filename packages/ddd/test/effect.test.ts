@@ -30,6 +30,11 @@ class Created extends DomainEvent.Class('created', Schema.Struct({ id: IdSchema 
 class Renamed extends DomainEvent.Class('renamed', Schema.Struct({ id: IdSchema, name: Schema.NonEmptyString })) {}
 class Other extends DomainEvent.Class('other', Schema.Struct({ id: IdSchema })) {}
 
+type Assert<T extends true> = T;
+type IsAny<T> = 0 extends 1 & T ? true : false;
+type CreatedConstructorPayload = ConstructorParameters<typeof Created>[0]['payload'];
+type _CreatedConstructorPayloadIsNotAny = Assert<IsAny<CreatedConstructorPayload> extends false ? true : false>;
+
 class TestAggregate extends AggregateRoot.Class<Id>()(Created, Renamed) {
 	private constructor(id: Id) {
 		super(id);
