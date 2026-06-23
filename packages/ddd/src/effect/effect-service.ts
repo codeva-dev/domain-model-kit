@@ -2,73 +2,50 @@ import { Effect, Layer } from 'effect';
 
 type NonNever<TValue> = [TValue] extends [never] ? object : TValue;
 
-type EffectServiceMake<TSelf extends object> = {
+type EffectServiceMake<TImplementation extends object> = {
 	readonly accessors: true;
-	readonly effect: Effect.Effect<NonNever<TSelf>, unknown, unknown>;
+	readonly effect: Effect.Effect<NonNever<TImplementation>, unknown, unknown>;
 	readonly dependencies?: ReadonlyArray<Layer.Layer.Any>;
 };
 
-export type EffectServiceClass<TSelf extends object> = Effect.Service.Class<
+export type EffectServiceClass<
+	TSelf extends object,
+	TImplementation extends object = NonNever<TSelf>,
+> = Effect.Service.Class<
 	NonNever<TSelf>,
 	string,
-	EffectServiceMake<TSelf>
-> &
-	Effect.Effect<TSelf, never, TSelf>;
+	EffectServiceMake<TImplementation>
+>;
 
 /**
  * Layer dependencies accepted by generated Effect service factories.
  */
 export type EffectServiceDependencies = ReadonlyArray<Layer.Layer.Any>;
 
-type EffectServiceBase<TSelf extends object> = Effect.Service.Class<NonNever<TSelf>, string, EffectServiceMake<TSelf>>;
-
-// Effect.Service is designed for `class X extends Effect.Service<X>()(...) {}`.
-// This is the single unsafe boundary that adapts that class API to yieldable const service tags.
-function makeYieldableServiceClass<TSelf extends object>(base: unknown): EffectServiceClass<TSelf> {
-	const serviceBase = base as EffectServiceBase<TSelf>;
-	const BaseClass = base as { new (...args: never[]): object };
-
-	abstract class YieldableService extends BaseClass {
-		public static readonly Default = serviceBase.Default;
-		public static readonly make = serviceBase.make;
-		public static readonly use = serviceBase.use;
-
-		public static [Symbol.iterator]() {
-			return serviceBase[Symbol.iterator]();
-		}
-	}
-
-	if ('DefaultWithoutDependencies' in serviceBase) {
-		Object.defineProperty(YieldableService, 'DefaultWithoutDependencies', {
-			value: serviceBase.DefaultWithoutDependencies,
-		});
-	}
-
-	return YieldableService as unknown as EffectServiceClass<TSelf>;
-}
-
 /**
  * Creates a yieldable Effect service class from a factory Effect.
  *
- * This helper centralizes the unsafe cast needed to adapt Effect's class-first
- * `Effect.Service` API to this library's const service factory API.
+ * This helper centralizes the small cast needed to create Effect service
+ * classes from library-generated implementation objects.
  */
-export function makeEffectServiceClass<TSelf extends object>(
+export function makeEffectServiceClass<
+	TSelf extends object,
+	TImplementation extends object = NonNever<TSelf>,
+>(
 	key: string,
-	effect: Effect.Effect<TSelf, unknown, unknown>,
+	effect: Effect.Effect<TImplementation, unknown, unknown>,
 	dependencies: EffectServiceDependencies = [],
-): EffectServiceClass<TSelf> {
+): EffectServiceClass<TSelf, TImplementation> {
 	const service = Effect.Service<NonNever<TSelf>>() as unknown as (
 		key: string,
-		make: EffectServiceMake<TSelf>,
-	) => EffectServiceBase<TSelf>;
-	const base = service(key, {
+		make: EffectServiceMake<TImplementation>,
+	) => EffectServiceClass<TSelf, TImplementation>;
+
+	return service(key, {
 		accessors: true,
-		effect: effect as Effect.Effect<NonNever<TSelf>, unknown, unknown>,
+		effect: effect as Effect.Effect<NonNever<TImplementation>, unknown, unknown>,
 		dependencies,
 	});
-
-	return makeYieldableServiceClass<TSelf>(base);
 }
 
 export function serviceImplementation<TSelf extends object>(value: unknown): TSelf {

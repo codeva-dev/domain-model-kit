@@ -30,14 +30,16 @@ export interface IPersistHandler<
 	handle(events: readonly TEvent[]): Effect.Effect<void, TError, TRequirements>;
 }
 
-/**
- * Implementation object returned by `PersistHandler.Service(...)` factories.
- */
-export type PersistHandlerServiceImplementation<
+type PersistHandlerBaseImplementation<TEvent extends DomainEventBase> = {
+	readonly accepts: readonly TEvent['eventKey'][];
+	canHandle(event: DomainEventBase): event is TEvent;
+};
+
+type PersistHandlerServiceImplementation<
 	TEvent extends DomainEventBase,
-	TError = never,
-	TRequirements = never,
-> = {
+	TError,
+	TRequirements,
+> = PersistHandlerBaseImplementation<TEvent> & {
 	handle(events: readonly TEvent[]): Effect.Effect<void, TError, TRequirements>;
 };
 
@@ -47,11 +49,11 @@ export type PersistHandlerServiceDefinition<
 	TRequirements = never,
 > = {
 	accepts: TEventClasses;
-	handle: (events: readonly EventsHandledBy<TEventClasses>[]) => Effect.Effect<void, TError, TRequirements>;
+	handle(events: readonly EventsHandledBy<TEventClasses>[]): Effect.Effect<void, TError, TRequirements>;
 	dependencies?: EffectServiceDependencies;
 };
 
-function makePersistHandlerService<Self extends AnyPersistHandler>() {
+function makePersistHandlerService<Self extends object>() {
 	return function <
 		const TKey extends string,
 		const TEventClasses extends readonly DomainEventClass[],
@@ -60,13 +62,13 @@ function makePersistHandlerService<Self extends AnyPersistHandler>() {
 	>(
 		key: TKey,
 		definition: PersistHandlerServiceDefinition<TEventClasses, TError, TRequirements>,
-	): EffectServiceClass<Self> {
+	): EffectServiceClass<Self, PersistHandlerServiceImplementation<EventsHandledBy<TEventClasses>, TError, TRequirements>> {
 		type Event = EventsHandledBy<TEventClasses>;
 
-		return makeEffectServiceClass<Self>(
+		return makeEffectServiceClass<Self, PersistHandlerServiceImplementation<Event, TError, TRequirements>>(
 			key,
 			Effect.succeed(
-				serviceImplementation<Self>({
+				serviceImplementation<PersistHandlerServiceImplementation<Event, TError, TRequirements>>({
 					accepts: definition.accepts.map((eventClass) => eventClass.eventKey),
 					canHandle(event: DomainEventBase): event is Event {
 						return definition.accepts.some((eventClass) => eventClass.is(event));
@@ -86,19 +88,19 @@ export const PersistHandler = {
 	 * Creates an Effect service that persists one or more domain event classes.
 	 *
 	 * @example
-	 * const OrderPersistHandler = PersistHandler.Service<OrderPersistHandlerService>()(
+	 * class OrderPersistHandler extends PersistHandler.Service<OrderPersistHandler>()(
 	 *   "OrderPersistHandler",
 	 *   {
-	 *     accepts: [OrderCreated, OrderItemAdded],
+	 *     accepts: OrderEvents,
+	 *     dependencies: [OrderDb.Default],
 	 *     handle(events) {
 	 *       return Effect.gen(function* () {
 	 *         const db = yield* OrderDb
 	 *         // persist accepted events
 	 *       })
-	 *     },
-	 *     dependencies: [OrderDb.Default]
+	 *     }
 	 *   }
-	 * )
+	 * ) {}
 	 */
 	Service: makePersistHandlerService,
 };

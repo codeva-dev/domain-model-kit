@@ -14,6 +14,11 @@ export type RepositoryPersistHandlerServices = readonly Effect.Effect<AnyPersist
 export type AnyAggregateRoot = AggregateRootBase<unknown, DomainEventBase>;
 export type SaveError<THandlers extends RepositoryPersistHandlers> = PersistHandlerError<THandlers[number]>;
 export type SaveRequirements<THandlers extends RepositoryPersistHandlers> = PersistHandlerRequirements<THandlers[number]>;
+type HandlerFromService<TService> = TService extends Effect.Effect<infer THandler, never, unknown> ? THandler : never;
+type SaveErrorFromServices<TServices extends RepositoryPersistHandlerServices> = PersistHandlerError<HandlerFromService<TServices[number]>>;
+type SaveRequirementsFromServices<TServices extends RepositoryPersistHandlerServices> = PersistHandlerRequirements<
+	HandlerFromService<TServices[number]>
+>;
 
 /**
  * Generated repository methods provided by `Repository.Service(...)`.
@@ -26,20 +31,15 @@ export type RepositoryServiceMethods<TError = never, TRequirements = never> = {
 		aggregate: TAggregate,
 	): Effect.Effect<void, TError, TRequirements>;
 };
-
-/**
- * Custom repository methods supplied by the consumer.
- *
- * `save` is reserved for the generated repository method.
- */
-export type RepositoryCustomMethods = object & { readonly save?: never };
+type RepositoryServiceImplementation<THandlers extends RepositoryPersistHandlerServices> = RepositoryServiceMethods<
+	SaveErrorFromServices<THandlers>,
+	SaveRequirementsFromServices<THandlers>
+>;
 /**
  * Definition object accepted by `Repository.Service(...)`.
  */
-export type RepositoryServiceDefinition<TCustomMethods extends RepositoryCustomMethods> = {
-	persistHandlers: RepositoryPersistHandlerServices;
-	effect?: Effect.Effect<TCustomMethods, unknown, unknown>;
-	sync?: () => TCustomMethods;
+export type RepositoryServiceDefinition<THandlers extends RepositoryPersistHandlerServices> = {
+	persistHandlers: THandlers;
 	dependencies?: EffectServiceDependencies;
 };
 
@@ -69,11 +69,14 @@ function saveWithHandlers(
 }
 
 function makeRepositoryService<Self extends object>() {
-	return function <const TKey extends string, TCustomMethods extends RepositoryCustomMethods = {}>(
+	return function <
+		const TKey extends string,
+		const THandlers extends RepositoryPersistHandlerServices,
+	>(
 		key: TKey,
-		definition: RepositoryServiceDefinition<TCustomMethods>,
-	): EffectServiceClass<Self> {
-		return makeEffectServiceClass<Self>(
+		definition: RepositoryServiceDefinition<THandlers>,
+	): EffectServiceClass<Self, RepositoryServiceImplementation<THandlers>> {
+		const Base = makeEffectServiceClass<Self, RepositoryServiceImplementation<THandlers>>(
 			key,
 			Effect.gen(function* () {
 				const persistHandlers: AnyPersistHandler[] = [];
@@ -82,16 +85,7 @@ function makeRepositoryService<Self extends object>() {
 					persistHandlers.push(yield* persistHandlerService);
 				}
 
-				const customMethods = definition.effect
-					? yield* definition.effect
-					: (definition.sync?.() ?? ({} as TCustomMethods));
-
-				if ('save' in customMethods) {
-					throw new Error('Repository.Service custom implementation must not define save().');
-				}
-
-				return serviceImplementation<Self>({
-					...customMethods,
+				return serviceImplementation<RepositoryServiceImplementation<THandlers>>({
 					save<TAggregate extends AnyAggregateRoot>(aggregate: TAggregate) {
 						return saveWithHandlers(aggregate, persistHandlers);
 					},
@@ -99,6 +93,19 @@ function makeRepositoryService<Self extends object>() {
 			}),
 			definition.dependencies,
 		);
+		const BaseClass = Base as unknown as { new (...args: never[]): object };
+
+		abstract class RepositoryService extends BaseClass {
+			public constructor(...args: never[]) {
+				super(...args);
+
+				if (Object.prototype.hasOwnProperty.call(Object.getPrototypeOf(this), 'save')) {
+					throw new Error('Repository.Service custom implementation must not define save().');
+				}
+			}
+		}
+
+		return RepositoryService as unknown as EffectServiceClass<Self, RepositoryServiceImplementation<THandlers>>;
 	};
 }
 
@@ -107,23 +114,20 @@ export const Repository = {
 	 * Creates an Effect service with generated `save(...)` plus custom repository methods.
 	 *
 	 * @example
-	 * const OrderRepository = Repository.Service<OrderRepositoryService>()(
+	 * class OrderRepository extends Repository.Service<OrderRepository>()(
 	 *   "OrderRepository",
 	 *   {
 	 *     persistHandlers: [OrderPersistHandler],
-	 *     sync: () => {
-	 *       return {
-	 *         findById(id: OrderId) {
-	 *           return Effect.gen(function* () {
-	 *             const db = yield* OrderDb
-	 *             // load aggregate
-	 *           })
-	 *         }
-	 *       }
-	 *     },
 	 *     dependencies: [OrderDb.Default, OrderPersistHandler.Default]
 	 *   }
-	 * )
+	 * ) {
+	 *   findById(id: OrderId) {
+	 *     return Effect.gen(function* () {
+	 *       const db = yield* OrderDb
+	 *       // load aggregate
+	 *     })
+	 *   }
+	 * }
 	 *
 	 * const repo = yield* OrderRepository
 	 */

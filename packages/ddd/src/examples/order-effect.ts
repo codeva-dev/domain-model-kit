@@ -1,4 +1,5 @@
-import { AggregateRoot, DomainError, DomainEvent, Effect, Entity, PersistHandler, Repository, Schema, type IPersistHandler } from '../effect/index.js';
+import { Effect, Schema } from 'effect';
+import { AggregateRoot, DomainError, DomainEvent, Entity, PersistHandler, Repository } from '../effect/index.js';
 
 const OrderIdSchema = Schema.UUID.pipe(Schema.brand('OrderId'));
 type OrderId = typeof OrderIdSchema.Type;
@@ -16,7 +17,8 @@ type OrderItem = typeof OrderItemSchema.Type;
 
 class OrderCreated extends DomainEvent.Class('order.created', Schema.Struct({ orderId: OrderIdSchema, items: Schema.Array(OrderItemSchema) })) {}
 class OrderItemAdded extends DomainEvent.Class('order.item.added', Schema.Struct({ orderId: OrderIdSchema, item: OrderItemSchema })) {}
-const OrderEventDecoder = DomainEvent.Decoder(OrderCreated, OrderItemAdded);
+const OrderEvents = [OrderCreated, OrderItemAdded] as const;
+const OrderEventDecoder = DomainEvent.Decoder(...OrderEvents);
 
 const OrderDomainError = DomainError.Class('OrderDomainError');
 type OrderDomainError = InstanceType<typeof OrderDomainError>;
@@ -38,7 +40,7 @@ class Product extends Entity.Class<ProductId>() {
 	}
 }
 
-class Order extends AggregateRoot.Class<OrderId>()(OrderCreated, OrderItemAdded) {
+class Order extends AggregateRoot.Class<OrderId>()(...OrderEvents) {
 	private constructor(id: OrderId, public readonly items: readonly OrderItem[]) {
 		super(id);
 	}
@@ -78,11 +80,10 @@ class Order extends AggregateRoot.Class<OrderId>()(OrderCreated, OrderItemAdded)
 	}
 }
 
-type OrderPersistHandlerService = IPersistHandler<OrderCreated | OrderItemAdded, OrderPersistenceError>;
-
-const OrderPersistHandler = PersistHandler.Service<OrderPersistHandlerService>()('OrderPersistHandler', {
-	accepts: [OrderCreated, OrderItemAdded],
-	handle(events: readonly (OrderCreated | OrderItemAdded)[]) {
+class OrderPersistHandler extends PersistHandler.Service<OrderPersistHandler>()('OrderPersistHandler', {
+	accepts: OrderEvents,
+	dependencies: [OrderDb.Default],
+	handle(events) {
 		return Effect.gen(function* () {
 			const db = yield* OrderDb;
 
@@ -103,34 +104,25 @@ const OrderPersistHandler = PersistHandler.Service<OrderPersistHandlerService>()
 			}).pipe(Effect.mapError(() => new OrderPersistenceError({ message: 'Persist failed' })));
 		});
 	},
-	dependencies: [OrderDb.Default],
-});
+}) {}
 
-type OrderRepositoryService = {
-	findById(id: OrderId): Effect.Effect<Order, OrderPersistenceError | OrderDomainError>;
-	save(aggregate: Order): Effect.Effect<void, OrderPersistenceError>;
-};
-
-const OrderRepository = Repository.Service<OrderRepositoryService>()('OrderRepository', {
+class OrderRepository extends Repository.Service<OrderRepository>()('OrderRepository', {
 	persistHandlers: [OrderPersistHandler],
-	sync: () => {
-		return {
-			findById(id: OrderId) {
-				return Effect.gen(function* () {
-					const db = yield* OrderDb;
-					const order = db.orders.get(id);
-
-					if (!order) {
-						return yield* Effect.fail(new OrderPersistenceError({ message: 'Order not found' }));
-					}
-
-					return yield* Order.hydrate(order);
-				});
-			},
-		};
-	},
 	dependencies: [OrderDb.Default, OrderPersistHandler.Default],
-});
+}) {
+	public findById(id: OrderId) {
+		return Effect.gen(function* () {
+			const db = yield* OrderDb;
+			const order = db.orders.get(id);
+
+			if (!order) {
+				return yield* Effect.fail(new OrderPersistenceError({ message: 'Order not found' }));
+			}
+
+			return yield* Order.hydrate(order);
+		});
+	}
+}
 
 export const runEffectOrderExample = Effect.gen(function* () {
 	const repository = yield* OrderRepository;

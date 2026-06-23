@@ -29,12 +29,10 @@ export {
 	type PersistHandlerError,
 	type PersistHandlerRequirements,
 	type PersistHandlerServiceDefinition,
-	type PersistHandlerServiceImplementation,
 } from './persist-handler.js';
 export {
 	Repository,
 	type RepositoryPersistHandlers,
-	type RepositoryCustomMethods,
 	type RepositoryServiceDefinition,
 	type RepositoryServiceMethods,
 	type SaveError,
@@ -42,4 +40,3 @@ export {
 } from './repository.js';
 export { ValueObject } from './value-object.js';
 export { ValueObjectBase } from './value-object.js';
-export { Effect, Schema } from 'effect';

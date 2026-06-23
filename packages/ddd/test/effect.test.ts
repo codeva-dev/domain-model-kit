@@ -17,7 +17,6 @@ import {
 	ValueObjectValidationError,
 	UnknownDomainError,
 	type DomainEventBase,
-	type IPersistHandler,
 } from '../src/effect/index.js';
 
 const noRequirements = <A, E>(effect: Effect.Effect<A, E, unknown>): Effect.Effect<A, E> =>
@@ -171,9 +170,7 @@ describe('effect', () => {
 
 	it.effect('dispatches repository handlers sequentially and clears only on success', () => {
 		class Db extends Context.Tag('EffectRepositoryDb')<Db, { calls: string[] }>() {}
-		type HandlerService = IPersistHandler<Created, Error, Db>;
-		type SkippedHandlerService = IPersistHandler<Renamed, Error, Db>;
-		const SkippedHandler = PersistHandler.Service<SkippedHandlerService>()('SkippedEffectRepositoryHandler', {
+		class SkippedHandler extends PersistHandler.Service<SkippedHandler>()('SkippedEffectRepositoryHandler', {
 			accepts: [Renamed],
 			handle() {
 				return Effect.gen(function* () {
@@ -181,8 +178,8 @@ describe('effect', () => {
 					db.calls.push('skipped');
 				});
 			},
-		});
-		const Handler = PersistHandler.Service<HandlerService>()('EffectRepositoryHandler', {
+		}) {}
+		class Handler extends PersistHandler.Service<Handler>()('EffectRepositoryHandler', {
 			accepts: [Created],
 			handle(events) {
 				return Effect.gen(function* () {
@@ -190,17 +187,27 @@ describe('effect', () => {
 					db.calls.push(...events.map((event) => event.eventKey));
 				});
 			},
-		});
-		type RepoService = { save(aggregate: TestAggregate): Effect.Effect<void, Error, Db> };
-		const Repo = Repository.Service<RepoService>()('EffectRepository', {
+		}) {}
+		class Repo extends Repository.Service<Repo>()('EffectRepository', {
 			persistHandlers: [SkippedHandler, Handler],
 			dependencies: [SkippedHandler.Default, Handler.Default],
-		});
+		}) {
+			public findLabel() {
+				return Effect.succeed('class-repository');
+			}
+		}
 		const db = { calls: [] as string[] };
 
 		return noRequirements(Effect.gen(function* () {
 			const aggregate = yield* TestAggregate.create('1' as Id);
 			const repo = yield* Repo;
+			const event = aggregate.getDomainEvents()[0];
+			const canHandle = event
+				? yield* Handler.use((handler) => Effect.succeed(handler.canHandle(event))).pipe(Effect.provide(Handler.Default))
+				: false;
+
+			expect(canHandle).toBe(true);
+			expect(yield* repo.findLabel()).toBe('class-repository');
 			yield* repo.save(aggregate);
 			expect(db.calls).toEqual(['created']);
 			expect(aggregate.getDomainEvents()).toHaveLength(0);
@@ -210,53 +217,41 @@ describe('effect', () => {
 	});
 
 	it.effect('supports effect custom methods and rejects save override', () => {
-		type RepoService = {
-			findLabel(): Effect.Effect<string>;
-			save(aggregate: TestAggregate): Effect.Effect<void>;
-		};
-		const Repo = Repository.Service<RepoService>()('EffectCustomRepository', {
+		class Repo extends Repository.Service<Repo>()('EffectCustomRepository', {
 			persistHandlers: [],
-			effect: Effect.succeed({
-				findLabel() {
-					return Effect.succeed('ok');
-				},
-			}),
-		});
-		const InvalidRepo = Repository.Service<RepoService>()('InvalidEffectCustomRepository', {
+		}) {
+			public findLabel() {
+				return Effect.succeed('ok');
+			}
+		}
+		class InvalidClassRepo extends Repository.Service<InvalidClassRepo>()('InvalidEffectCustomClassRepository', {
 			persistHandlers: [],
-			sync: () =>
-				({
-					save() {
-						return Effect.void;
-					},
-					findLabel() {
-						return Effect.succeed('bad');
-					},
-				}) as never,
-		});
+		}) {
+			public save<TAggregate>(_aggregate: TAggregate) {
+				return Effect.void;
+			}
+		}
 
 		return noRequirements(Effect.gen(function* () {
 			const repo = yield* Repo;
 			expect(yield* repo.findLabel()).toBe('ok');
-			const invalid = yield* Effect.exit(InvalidRepo.pipe(Effect.provide(InvalidRepo.Default)));
-			expect(Exit.isFailure(invalid)).toBe(true);
+			const invalidClass = yield* Effect.exit(InvalidClassRepo.pipe(Effect.provide(InvalidClassRepo.Default)));
+			expect(Exit.isFailure(invalidClass)).toBe(true);
 		}).pipe(Effect.provide(Repo.Default)));
 	});
 
 	it.effect('keeps aggregate events when repository persistence fails', () => {
 		class Failure extends DomainError.Class('Failure') {}
-		type HandlerService = IPersistHandler<Created, Failure>;
-		const Handler = PersistHandler.Service<HandlerService>()('FailingEffectHandler', {
+		class Handler extends PersistHandler.Service<Handler>()('FailingEffectHandler', {
 			accepts: [Created],
 			handle() {
 				return Effect.fail(new Failure({ message: 'fail' }));
 			},
-		});
-		type RepoService = { save(aggregate: TestAggregate): Effect.Effect<void, Failure> };
-		const Repo = Repository.Service<RepoService>()('FailingEffectRepository', {
+		}) {}
+		class Repo extends Repository.Service<Repo>()('FailingEffectRepository', {
 			persistHandlers: [Handler],
 			dependencies: [Handler.Default],
-		});
+		}) {}
 
 		return noRequirements(Effect.gen(function* () {
 			const aggregate = yield* TestAggregate.create('1' as Id);
@@ -269,8 +264,7 @@ describe('effect', () => {
 
 	it.effect('resolves handler db from the current save execution context', () => {
 		class Db extends Context.Tag('CurrentDb')<Db, { name: string; calls: string[] }>() {}
-		type HandlerService = IPersistHandler<Created, never, Db>;
-		const Handler = PersistHandler.Service<HandlerService>()('CurrentDbHandler', {
+		class Handler extends PersistHandler.Service<Handler>()('CurrentDbHandler', {
 			accepts: [Created],
 			handle(events) {
 				return Effect.gen(function* () {
@@ -278,12 +272,11 @@ describe('effect', () => {
 					db.calls.push(`${db.name}:${events[0]?.eventKey}`);
 				});
 			},
-		});
-		type RepoService = { save(aggregate: TestAggregate): Effect.Effect<void, never, Db> };
-		const Repo = Repository.Service<RepoService>()('CurrentDbRepository', {
+		}) {}
+		class Repo extends Repository.Service<Repo>()('CurrentDbRepository', {
 			persistHandlers: [Handler],
 			dependencies: [Handler.Default],
-		});
+		}) {}
 		const first = { name: 'first', calls: [] as string[] };
 		const second = { name: 'second', calls: [] as string[] };
 
