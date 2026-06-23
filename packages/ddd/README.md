@@ -384,6 +384,7 @@ The Effect implementation uses:
 ### Domain Errors
 
 Effect errors are independent `Schema.TaggedError` classes created with `DomainError.Class(...)`.
+The returned class keeps the Effect Schema class surface, so it can be passed to helpers that accept schema-backed tagged errors and can also be yielded as an Effect failure.
 
 ```ts
 import { Schema } from "effect"
@@ -552,6 +553,8 @@ class OrderRepository extends Repository.Service<OrderRepository>()("OrderReposi
 ```
 
 Custom repository methods live in the class body. The generated `save(...)` method is reserved and cannot be overridden.
+
+`dependencies` should contain the `Default` layers needed to build the service. When all construction dependencies are listed there, the generated service `Default` layer is self-contained and can be merged into an application runtime without leaking those construction requirements to the outer layer type.
 
 Persist handlers should resolve database/context services inside the returned `handle(...)` Effect. This keeps transaction-aware services correct: when `repository.save(...)` runs inside a transaction boundary, handlers read the DB service from the current Effect context at handler execution time.
 

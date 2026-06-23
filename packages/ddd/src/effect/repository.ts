@@ -38,9 +38,12 @@ type RepositoryServiceImplementation<THandlers extends RepositoryPersistHandlerS
 /**
  * Definition object accepted by `Repository.Service(...)`.
  */
-export type RepositoryServiceDefinition<THandlers extends RepositoryPersistHandlerServices> = {
+export type RepositoryServiceDefinition<
+	THandlers extends RepositoryPersistHandlerServices,
+	TDependencies extends EffectServiceDependencies = readonly [],
+> = {
 	persistHandlers: THandlers;
-	dependencies?: EffectServiceDependencies;
+	dependencies?: TDependencies;
 };
 
 function saveWithHandlers(
@@ -72,26 +75,44 @@ function makeRepositoryService<Self extends object>() {
 	return function <
 		const TKey extends string,
 		const THandlers extends RepositoryPersistHandlerServices,
+		const TDependencies extends EffectServiceDependencies = readonly [],
 	>(
 		key: TKey,
-		definition: RepositoryServiceDefinition<THandlers>,
-	): EffectServiceClass<Self, RepositoryServiceImplementation<THandlers>> {
-		const Base = makeEffectServiceClass<Self, RepositoryServiceImplementation<THandlers>>(
+		definition: RepositoryServiceDefinition<THandlers, TDependencies>,
+	): EffectServiceClass<
+		Self,
+		RepositoryServiceImplementation<THandlers>,
+		never,
+		HandlerFromService<THandlers[number]>,
+		TDependencies
+	> {
+		const effect = Effect.gen(function* () {
+			const persistHandlers: AnyPersistHandler[] = [];
+
+			for (const persistHandlerService of definition.persistHandlers) {
+				persistHandlers.push(yield* persistHandlerService);
+			}
+
+			return serviceImplementation<RepositoryServiceImplementation<THandlers>>({
+				save<TAggregate extends AnyAggregateRoot>(aggregate: TAggregate) {
+					return saveWithHandlers(aggregate, persistHandlers);
+				},
+			});
+		}) as Effect.Effect<
+			RepositoryServiceImplementation<THandlers>,
+			never,
+			HandlerFromService<THandlers[number]>
+		>;
+		const Base = makeEffectServiceClass<
+			Self,
+			RepositoryServiceImplementation<THandlers>,
+			never,
+			HandlerFromService<THandlers[number]>,
+			TDependencies
+		>(
 			key,
-			Effect.gen(function* () {
-				const persistHandlers: AnyPersistHandler[] = [];
-
-				for (const persistHandlerService of definition.persistHandlers) {
-					persistHandlers.push(yield* persistHandlerService);
-				}
-
-				return serviceImplementation<RepositoryServiceImplementation<THandlers>>({
-					save<TAggregate extends AnyAggregateRoot>(aggregate: TAggregate) {
-						return saveWithHandlers(aggregate, persistHandlers);
-					},
-				});
-			}),
-			definition.dependencies,
+			effect,
+			(definition.dependencies ?? []) as TDependencies,
 		);
 		const BaseClass = Base as unknown as { new (...args: never[]): object };
 
@@ -105,7 +126,13 @@ function makeRepositoryService<Self extends object>() {
 			}
 		}
 
-		return RepositoryService as unknown as EffectServiceClass<Self, RepositoryServiceImplementation<THandlers>>;
+		return RepositoryService as unknown as EffectServiceClass<
+			Self,
+			RepositoryServiceImplementation<THandlers>,
+			never,
+			HandlerFromService<THandlers[number]>,
+			TDependencies
+		>;
 	};
 }
 

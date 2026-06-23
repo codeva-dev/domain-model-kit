@@ -2,19 +2,27 @@ import { Effect, Layer } from 'effect';
 
 type NonNever<TValue> = [TValue] extends [never] ? object : TValue;
 
-type EffectServiceMake<TImplementation extends object> = {
+type EffectServiceMake<
+	TImplementation extends object,
+	TError,
+	TRequirements,
+	TDependencies extends EffectServiceDependencies,
+> = {
 	readonly accessors: true;
-	readonly effect: Effect.Effect<NonNever<TImplementation>, unknown, unknown>;
-	readonly dependencies?: ReadonlyArray<Layer.Layer.Any>;
+	readonly effect: Effect.Effect<NonNever<TImplementation>, TError, TRequirements>;
+	readonly dependencies: TDependencies;
 };
 
 export type EffectServiceClass<
 	TSelf extends object,
 	TImplementation extends object = NonNever<TSelf>,
+	TError = never,
+	TRequirements = never,
+	TDependencies extends EffectServiceDependencies = readonly [],
 > = Effect.Service.Class<
 	NonNever<TSelf>,
 	string,
-	EffectServiceMake<TImplementation>
+	EffectServiceMake<TImplementation, TError, TRequirements, TDependencies>
 >;
 
 /**
@@ -31,19 +39,22 @@ export type EffectServiceDependencies = ReadonlyArray<Layer.Layer.Any>;
 export function makeEffectServiceClass<
 	TSelf extends object,
 	TImplementation extends object = NonNever<TSelf>,
+	TError = never,
+	TRequirements = never,
+	const TDependencies extends EffectServiceDependencies = readonly [],
 >(
 	key: string,
-	effect: Effect.Effect<TImplementation, unknown, unknown>,
-	dependencies: EffectServiceDependencies = [],
-): EffectServiceClass<TSelf, TImplementation> {
+	effect: Effect.Effect<TImplementation, TError, TRequirements>,
+	dependencies: TDependencies = [] as unknown as TDependencies,
+): EffectServiceClass<TSelf, TImplementation, TError, TRequirements, TDependencies> {
 	const service = Effect.Service<NonNever<TSelf>>() as unknown as (
 		key: string,
-		make: EffectServiceMake<TImplementation>,
-	) => EffectServiceClass<TSelf, TImplementation>;
+		make: EffectServiceMake<TImplementation, TError, TRequirements, TDependencies>,
+	) => EffectServiceClass<TSelf, TImplementation, TError, TRequirements, TDependencies>;
 
 	return service(key, {
 		accessors: true,
-		effect: effect as Effect.Effect<NonNever<TImplementation>, unknown, unknown>,
+		effect: effect as Effect.Effect<NonNever<TImplementation>, TError, TRequirements>,
 		dependencies,
 	});
 }

@@ -47,10 +47,11 @@ export type PersistHandlerServiceDefinition<
 	TEventClasses extends readonly DomainEventClass[],
 	TError = never,
 	TRequirements = never,
+	TDependencies extends EffectServiceDependencies = readonly [],
 > = {
 	accepts: TEventClasses;
 	handle(events: readonly EventsHandledBy<TEventClasses>[]): Effect.Effect<void, TError, TRequirements>;
-	dependencies?: EffectServiceDependencies;
+	dependencies?: TDependencies;
 };
 
 function makePersistHandlerService<Self extends object>() {
@@ -59,13 +60,26 @@ function makePersistHandlerService<Self extends object>() {
 		const TEventClasses extends readonly DomainEventClass[],
 		TError = never,
 		TRequirements = never,
+		const TDependencies extends EffectServiceDependencies = readonly [],
 	>(
 		key: TKey,
-		definition: PersistHandlerServiceDefinition<TEventClasses, TError, TRequirements>,
-	): EffectServiceClass<Self, PersistHandlerServiceImplementation<EventsHandledBy<TEventClasses>, TError, TRequirements>> {
+		definition: PersistHandlerServiceDefinition<TEventClasses, TError, TRequirements, TDependencies>,
+	): EffectServiceClass<
+		Self,
+		PersistHandlerServiceImplementation<EventsHandledBy<TEventClasses>, TError, TRequirements>,
+		never,
+		never,
+		TDependencies
+	> {
 		type Event = EventsHandledBy<TEventClasses>;
 
-		return makeEffectServiceClass<Self, PersistHandlerServiceImplementation<Event, TError, TRequirements>>(
+		return makeEffectServiceClass<
+			Self,
+			PersistHandlerServiceImplementation<Event, TError, TRequirements>,
+			never,
+			never,
+			TDependencies
+		>(
 			key,
 			Effect.succeed(
 				serviceImplementation<PersistHandlerServiceImplementation<Event, TError, TRequirements>>({
@@ -78,7 +92,7 @@ function makePersistHandlerService<Self extends object>() {
 					},
 				}),
 			),
-			definition.dependencies,
+			(definition.dependencies ?? []) as TDependencies,
 		);
 	};
 }

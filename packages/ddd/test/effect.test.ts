@@ -31,8 +31,17 @@ class Other extends DomainEvent.Class('other', Schema.Struct({ id: IdSchema })) 
 
 type Assert<T extends true> = T;
 type IsAny<T> = 0 extends 1 & T ? true : false;
+type IsAssignable<TValue, TTarget> = TValue extends TTarget ? true : false;
 type CreatedConstructorPayload = ConstructorParameters<typeof Created>[0]['payload'];
 type _CreatedConstructorPayloadIsNotAny = Assert<IsAny<CreatedConstructorPayload> extends false ? true : false>;
+const acceptsNoContextTaggedError = <
+	TTaggedError extends Schema.Schema.AnyNoContext & {
+		readonly _tag: string;
+		readonly make: (...args: never[]) => unknown;
+	},
+>(
+	taggedError: TTaggedError,
+) => taggedError;
 
 class TestAggregate extends AggregateRoot.Class<Id>()(Created, Renamed) {
 	private constructor(id: Id) {
@@ -155,6 +164,7 @@ describe('effect', () => {
 				message: Schema.String,
 				orderId: Schema.String,
 			});
+			acceptsNoContextTaggedError(OrderNotFound);
 			const error = new OrderNotFound({ message: 'Order not found', orderId: '1' });
 			const failed = yield* Effect.exit(
 				Effect.gen(function* () {
@@ -196,6 +206,7 @@ describe('effect', () => {
 				return Effect.succeed('class-repository');
 			}
 		}
+		type _RepoDefaultHasNoRequirements = Assert<IsAssignable<typeof Repo.Default, Layer.Layer<Repo, never, never>>>;
 		const db = { calls: [] as string[] };
 
 		return noRequirements(Effect.gen(function* () {

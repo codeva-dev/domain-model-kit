@@ -6,12 +6,17 @@ const defaultDomainErrorFields = {
 };
 
 type DefaultDomainErrorFields = typeof defaultDomainErrorFields;
+type TaggedDomainErrorFields<TTag extends string, TFields extends Schema.Struct.Fields> = {
+	readonly _tag: Schema.tag<TTag>;
+} & TFields;
 export type DomainErrorInstance<TTag extends string, TFields extends Schema.Struct.Fields = DefaultDomainErrorFields> =
 	Cause.YieldableError & Schema.Struct.Type<TFields> & { readonly _tag: TTag };
-export type DomainErrorClass<TTag extends string, TFields extends Schema.Struct.Fields = DefaultDomainErrorFields> = {
-	readonly _tag: TTag;
-	new (props: Schema.Struct.Constructor<TFields>): DomainErrorInstance<TTag, TFields>;
-};
+export type DomainErrorClass<TTag extends string, TFields extends Schema.Struct.Fields = DefaultDomainErrorFields> =
+	Schema.TaggedErrorClass<
+		DomainErrorInstance<TTag, TFields>,
+		TTag,
+		TaggedDomainErrorFields<TTag, TFields>
+	>;
 
 /**
  * Creates Effect `Schema.TaggedError` classes for domain errors.
