@@ -2,7 +2,6 @@ import { Schema, type Cause } from 'effect';
 
 const defaultDomainErrorFields = {
 	message: Schema.String,
-	cause: Schema.optional(Schema.Unknown),
 };
 
 type DefaultDomainErrorFields = typeof defaultDomainErrorFields;
@@ -49,7 +48,7 @@ export const DomainError = {
 	/**
 	 * Creates an Effect `Schema.TaggedError` class.
 	 *
-	 * If fields are omitted, the error shape is `{ message: string; cause?: unknown }`.
+	 * If fields are omitted, the error shape is `{ message: string }`.
 	 */
 	Class: makeDomainError,
 };

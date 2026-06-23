@@ -164,6 +164,10 @@ describe('effect', () => {
 				message: Schema.String,
 				orderId: Schema.String,
 			});
+			const DefaultOrderError = DomainError.Class('DefaultOrderError');
+			type _DefaultOrderErrorEncodedHasNoCause = Assert<
+				'cause' extends keyof typeof DefaultOrderError.Encoded ? false : true
+			>;
 			acceptsNoContextTaggedError(OrderNotFound);
 			const error = new OrderNotFound({ message: 'Order not found', orderId: '1' });
 			const failed = yield* Effect.exit(

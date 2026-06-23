@@ -69,8 +69,7 @@ function makeValueObject<const TSchema extends Schema.Schema.Any>(schema: TSchem
 				Effect.mapError(
 					(error) =>
 						new ValueObjectValidationError({
-							message: 'Value object validation failed',
-							cause: error,
+							message: `Value object validation failed: ${error.message}`,
 						}),
 				),
 				Effect.map((value) => new CreatedValueObject(value)),

@@ -135,8 +135,7 @@ function makeDomainEvent<const TEventKey extends string, const TPayloadSchema ex
 				Effect.mapError(
 					(error) =>
 						new DomainEventValidationError({
-							message: 'Domain event payload validation failed',
-							cause: error,
+							message: `Domain event payload validation failed: ${error.message}`,
 						}),
 				),
 				Effect.map((payload) => new EventClass({ ...props, payload })),
@@ -148,8 +147,7 @@ function makeDomainEvent<const TEventKey extends string, const TPayloadSchema ex
 				Effect.mapError(
 					(error) =>
 						new DomainEventValidationError({
-							message: 'Domain event payload encoding failed',
-							cause: error,
+							message: `Domain event payload encoding failed: ${error.message}`,
 						}),
 				),
 				Effect.map((payload) => ({

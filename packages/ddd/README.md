@@ -385,6 +385,7 @@ The Effect implementation uses:
 
 Effect errors are independent `Schema.TaggedError` classes created with `DomainError.Class(...)`.
 The returned class keeps the Effect Schema class surface, so it can be passed to helpers that accept schema-backed tagged errors and can also be yielded as an Effect failure.
+When fields are omitted, the public schema is `{ message: string }`; raw `cause` values are intentionally not part of the default encoded payload.
 
 ```ts
 import { Schema } from "effect"
