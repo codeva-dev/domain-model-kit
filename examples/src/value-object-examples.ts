@@ -1,8 +1,8 @@
 import z4 from 'zod/v4';
 import { Effect, Schema } from 'effect';
-import * as Pure from '../pure/index.js';
-import * as Neverthrow from '../neverthrow/index.js';
-import * as EffectDdd from '../effect/index.js';
+import * as Pure from '@codeva-dev/domain-model-kit/pure';
+import * as Neverthrow from '@codeva-dev/domain-model-kit/neverthrow';
+import * as EffectDdd from '@codeva-dev/domain-model-kit/effect';
 
 class PureEmail extends Pure.ValueObject.Class(z4.email().brand('Email')) {}
 

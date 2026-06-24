@@ -1,6 +1,6 @@
 import { err, errAsync, ok, ResultAsync, type Result } from 'neverthrow';
 import z4 from 'zod/v4';
-import { AggregateRoot, DomainEvent, DomainEventValidationError, Entity, PersistHandler, Repository } from '../neverthrow/index.js';
+import { AggregateRoot, DomainEvent, DomainEventValidationError, Entity, PersistHandler, Repository } from '@codeva-dev/domain-model-kit/neverthrow';
 
 const OrderIdSchema = z4.uuidv4().brand('OrderId');
 type OrderId = z4.infer<typeof OrderIdSchema>;

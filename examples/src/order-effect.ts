@@ -1,5 +1,5 @@
 import { Effect, Schema } from 'effect';
-import { AggregateRoot, DomainError, DomainEvent, Entity, PersistHandler, Repository } from '../effect/index.js';
+import { AggregateRoot, DomainError, DomainEvent, Entity, PersistHandler, Repository } from '@codeva-dev/domain-model-kit/effect';
 
 const OrderIdSchema = Schema.UUID.pipe(Schema.brand('OrderId'));
 type OrderId = typeof OrderIdSchema.Type;
@@ -144,4 +144,7 @@ export const runEffectOrderExample = Effect.gen(function* () {
 	yield* repository.findById(order.id);
 	const updated = yield* order.addItem(product, QuantitySchema.make(1));
 	yield* repository.save(updated);
-}).pipe(Effect.provide(OrderRepository.Default));
+}).pipe(
+	Effect.provide(OrderRepository.Default),
+	Effect.provide(OrderDb.Default),
+);

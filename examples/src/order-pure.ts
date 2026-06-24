@@ -1,5 +1,5 @@
 import z4 from 'zod/v4';
-import { AggregateRoot, DomainEvent, Entity, PersistHandler, Repository } from '../pure/index.js';
+import { AggregateRoot, DomainEvent, Entity, PersistHandler, Repository } from '@codeva-dev/domain-model-kit/pure';
 
 const OrderIdSchema = z4.uuidv4().brand('OrderId');
 type OrderId = z4.infer<typeof OrderIdSchema>;
