@@ -1,124 +1,251 @@
 ---
 name: domain-model-kit
-description: Work on the @codeva-dev/domain-model-kit TypeScript package. Use when modifying its pure, neverthrow, or Effect adapters; changing repository, persist-handler, domain-event, value-object, or domain-error APIs; updating examples or README; validating builds; installing from GitHub; or preparing npm alpha releases.
+description: Use @codeva-dev/domain-model-kit in a TypeScript application. Use when modeling domains with value objects, entities, aggregate roots, domain events, repositories, persist handlers, or domain errors using the package's pure, neverthrow, or Effect adapters.
 ---
 
 # Domain Model Kit
 
-## Repository Shape
+## Purpose
 
-The repository root is the publishable `@codeva-dev/domain-model-kit` package. Keep it that way: do not reintroduce `packages/ddd`, `apps`, or Lerna-style release management.
+Use `@codeva-dev/domain-model-kit` to model application domains around explicit aggregate behavior and recorded domain events. The aggregate owns business decisions; repositories dispatch recorded events to persist handlers; infrastructure concerns stay outside the model.
 
-- Source lives in `src/pure`, `src/neverthrow`, and `src/effect`.
-- Public subpaths are `@codeva-dev/domain-model-kit/pure`, `/neverthrow`, and `/effect`.
-- Tests live in `test`.
-- `examples` is a private TypeScript workspace that depends on the root package through `file:..` and should import only public package subpaths.
-- Build output belongs in `dist`; example build output belongs in `examples/dist`.
+Do not treat the package as an ORM, application framework, transaction manager, outbox adapter, or event-sourcing framework. It provides domain modeling primitives and an event-dispatching persistence boundary.
 
-## Design Rules
+## Pick An Adapter
 
-Keep the three adapters conceptually cohesive while respecting their runtime differences.
+Choose exactly one adapter for a bounded context unless there is a strong migration reason.
 
-- Pure and neverthrow APIs use class-extension factories such as `Repository.Class(...)`.
-- Effect APIs use class-first services such as `Repository.Service<Self>()(...)` and `PersistHandler.Service<Self>()(...)`.
-- Prefer minimal, understandable type helpers over broad type machinery.
-- Do not add parallel public names unless the existing public name cannot be kept technically.
-- Do not change pure or neverthrow implementations for an Effect-only fix unless package cohesion or documentation requires it.
-- When fixing inference or interop, add focused type-level coverage so regressions are visible in `typecheck:test`.
+```ts
+import { AggregateRoot, DomainEvent, Repository } from "@codeva-dev/domain-model-kit/pure"
+import { AggregateRoot, DomainEvent, Repository } from "@codeva-dev/domain-model-kit/neverthrow"
+import { AggregateRoot, DomainEvent, Repository } from "@codeva-dev/domain-model-kit/effect"
+```
 
-## Effect Adapter Rules
+- Use `pure` for direct values and exception-based domain failures.
+- Use `neverthrow` when expected failures should be `Result` values.
+- Use `effect` when the application already uses Effect, layers, services, and Effect Schema.
 
-Effect adapter examples and docs must import Effect primitives from `effect`, not from this package:
+The adapters share names and concepts, but not runtime types. Do not mix classes from different adapters in one model.
+
+## Modeling Flow
+
+Model write behavior in this order:
+
+1. Define value objects for validated immutable values.
+2. Define domain events for meaningful state changes.
+3. Define entities and aggregate roots for identity and consistency boundaries.
+4. Put business decisions on aggregate methods.
+5. Record domain events inside aggregate methods.
+6. Create persist handlers that accept and persist specific event classes.
+7. Create a repository that generates `save(...)` and exposes custom query/load methods.
+8. Put transactions, auth, retries, logging, queues, and framework boundaries outside the domain model.
+
+The normal application write flow is:
+
+1. Open an application-level transaction boundary.
+2. Load the aggregate and related read data needed for the rule.
+3. Call aggregate methods.
+4. Call `repository.save(aggregate)` inside the same boundary.
+5. Let persist handlers update storage, append event records, insert outbox rows, or update projections.
+
+## Event Persistence Semantics
+
+`Repository.save(aggregate)` reads the aggregate's recorded events, dispatches them to matching persist handlers, and clears events only after every handler succeeds.
+
+- Saving an aggregate with no recorded events is a no-op success.
+- Events are dispatched in recorded order and handler order.
+- Persist handlers receive accepted events in batch.
+- If any handler fails, recorded events remain on the aggregate so the caller can retry or fail the transaction.
+- Persist handlers should not own retry policy, transaction boundaries, or telemetry policy.
+
+## Pure Adapter
+
+Use the pure adapter when direct returns and thrown domain errors fit the project.
+
+```ts
+import { AggregateRoot, DomainEvent, PersistHandler, Repository } from "@codeva-dev/domain-model-kit/pure"
+import z4 from "zod/v4"
+
+class OrderCreated extends DomainEvent.Class("order.created", z4.object({
+  orderId: z4.string(),
+  items: z4.array(z4.string()),
+})) {}
+
+class Order extends AggregateRoot.Class<string>()(OrderCreated) {
+  private constructor(id: string, public readonly items: readonly string[]) {
+    super(id)
+  }
+
+  static create(id: string, items: string[]) {
+    const order = new Order(id, items)
+    order.recordDomainEvent(OrderCreated.create({
+      instanceId: id,
+      payload: { orderId: id, items },
+    }))
+    return order
+  }
+}
+
+type DbContext = { orders: Map<string, { id: string; items: string[] }> }
+const db: DbContext = { orders: new Map() }
+
+class OrderPersistHandler extends PersistHandler.Class({
+  accepts: [OrderCreated],
+  handle(events, context: DbContext) {
+    for (const event of events) {
+      context.orders.set(event.payload.orderId, {
+        id: event.payload.orderId,
+        items: [...event.payload.items],
+      })
+    }
+  },
+}) {}
+
+class OrderRepository extends Repository.Class({
+  dbContext: db,
+  persistHandlers: [new OrderPersistHandler()],
+}) {
+  findById(id: string) {
+    // Load and return Order.
+  }
+}
+```
+
+Use `save(aggregate, context)` when pure persistence needs per-call context such as a transaction object.
+
+## Neverthrow Adapter
+
+Use the neverthrow adapter when expected domain and persistence failures should stay in `Result` instead of exceptions.
+
+```ts
+import { ok } from "neverthrow"
+import { AggregateRoot, DomainEvent, PersistHandler, Repository } from "@codeva-dev/domain-model-kit/neverthrow"
+import z4 from "zod/v4"
+
+class OrderCreated extends DomainEvent.Class("order.created", z4.object({
+  orderId: z4.string(),
+  items: z4.array(z4.string()),
+})) {}
+
+type DbContext = { orders: Map<string, { id: string; items: string[] }> }
+const db: DbContext = { orders: new Map() }
+
+class OrderPersistHandler extends PersistHandler.Class({
+  accepts: [OrderCreated],
+  handle(events, context: DbContext) {
+    for (const event of events) {
+      context.orders.set(event.payload.orderId, {
+        id: event.payload.orderId,
+        items: [...event.payload.items],
+      })
+    }
+
+    return ok(undefined)
+  },
+}) {}
+
+class OrderRepository extends Repository.Class({
+  dbContext: db,
+  persistHandlers: [new OrderPersistHandler()],
+}) {
+  findById(id: string) {
+    // Return Result<Order, Error>.
+  }
+}
+```
+
+Keep expected application failures in the `Result` error branch. Reserve thrown exceptions for defects or truly unexpected runtime failures.
+
+## Effect Adapter
+
+Use the Effect adapter with Effect services, layers, and Effect Schema. Import Effect primitives from `effect`, not from this package.
 
 ```ts
 import { Effect, Schema } from "effect"
-import { DomainError, Repository } from "@codeva-dev/domain-model-kit/effect"
+import { AggregateRoot, DomainEvent, PersistHandler, Repository } from "@codeva-dev/domain-model-kit/effect"
 ```
 
-The package Effect subpath should expose DDD primitives, not re-export the full Effect ecosystem.
+Use class-first services:
 
-For repositories:
+```ts
+class OrderCreated extends DomainEvent.Class("order.created", Schema.Struct({
+  orderId: Schema.String,
+  items: Schema.Array(Schema.String),
+})) {}
 
-- Use `class OrderRepository extends Repository.Service<OrderRepository>()("OrderRepository", { ... })`.
-- `Repository.Service` generates `save(...)`; class bodies define custom methods.
-- Do not allow overriding `save`; keep the runtime guard and tests.
+class OrderDb extends Effect.Service<OrderDb>()("OrderDb", {
+  succeed: {
+    orders: new Map<string, { id: string; items: string[] }>(),
+  },
+}) {}
+
+class OrderPersistHandler extends PersistHandler.Service<OrderPersistHandler>()(
+  "OrderPersistHandler",
+  {
+    accepts: [OrderCreated],
+    dependencies: [OrderDb.Default],
+    handle: (events) =>
+      Effect.gen(function* () {
+        const db = yield* OrderDb
+
+        for (const event of events) {
+          db.orders.set(event.payload.orderId, {
+            id: event.payload.orderId,
+            items: [...event.payload.items],
+          })
+        }
+      }),
+  },
+) {}
+
+class OrderRepository extends Repository.Service<OrderRepository>()(
+  "OrderRepository",
+  {
+    persistHandlers: [OrderPersistHandler],
+    dependencies: [OrderDb.Default, OrderPersistHandler.Default],
+  },
+) {
+  findById(id: string) {
+    return Effect.gen(function* () {
+      const db = yield* OrderDb
+      return db.orders.get(id)
+    })
+  }
+}
+```
+
+Effect usage rules:
+
+- `Repository.Service<Self>()(...)` generates `save(...)`; define custom methods in the class body.
+- Do not define a custom `save`; it is the generated persistence dispatch method.
+- `PersistHandler.Service<Self>()(...)` should usually put `handle` in the definition object so event types are inferred from `accepts`.
 - `persistHandlers` are service tags such as `[OrderPersistHandler]`, not instances.
-- Dependencies should be provided with layers such as `[OrderDb.Default, OrderPersistHandler.Default]`.
-- If all construction dependencies are listed in `dependencies`, the generated `Default` layer should not leak construction requirements.
+- `dependencies` should include the layers needed to construct the repository or handler defaults.
+- Resolve DB, transaction, request context, or other services inside the returned `Effect`, not at service construction time.
 
-For persist handlers:
+## Domain Errors
 
-- Use `class OrderPersistHandler extends PersistHandler.Service<OrderPersistHandler>()("OrderPersistHandler", { accepts, dependencies, handle }) {}`.
-- Keep `handle` in the definition object when event inference should come from `accepts`.
-- Keep `accepts` and `canHandle` generated from the accepted event classes.
-- Resolve DB, transaction, and context services inside the returned `Effect`, not while constructing the service layer.
+Use domain errors for expected business failures, not infrastructure defects.
 
-For domain errors:
+In Effect, `DomainError.Class(...)` creates Effect Schema tagged errors. The public encoded shape is intentionally serializable:
 
-- `DomainError.Class(...)` must remain compatible with Effect `Schema.TaggedErrorClass`.
-- The default public encoded payload is `{ _tag, message }`.
-- Do not include raw `cause?: unknown` in the default encoded schema; it breaks transport serializability.
+```ts
+import { Schema } from "effect"
+import { DomainError } from "@codeva-dev/domain-model-kit/effect"
 
-## Documentation Rules
-
-README examples should be general package examples, not project-specific migrations.
-
-- Use the order domain as the default documentation example.
-- Avoid server boundary, application route, or platform-specific examples in the package README.
-- Keep pure, neverthrow, and Effect sections aligned in vocabulary and concepts.
-- Update `examples` when public API examples change.
-
-## Validation
-
-Run the narrowest useful checks while iterating. Before release or broad API changes, run:
-
-```bash
-npm run typecheck
-npm run typecheck:test
-npm run test
-npm run build
-npm run examples:typecheck
-npm run examples:build
-npm run pack:dry-run
+const OrderNotFound = DomainError.Class("OrderNotFound", {
+  orderId: Schema.String,
+})
 ```
 
-Use `npm run pack:dry-run` to verify the published package shape and GitHub install shape.
+Do not expose raw `Error`, `cause: unknown`, database errors, decode errors, or runtime layer failures as public domain failures. Map only intentional domain/application errors across transport boundaries.
 
-## Release Notes
+## Usage Checklist
 
-The root package can be installed from a GitHub tag or commit because `prepare` builds `dist`.
-
-For alpha releases, use the package scripts or the equivalent npm commands:
-
-```bash
-npm run version:alpha
-npm run publish:alpha
-```
-
-Equivalent commands:
-
-```bash
-npm version prerelease --preid alpha
-npm publish --tag alpha --access public
-```
-
-Known npm auth path: stale local npm tokens can produce misleading publish failures. Prefer a temporary npm config with web auth and the 1Password OTP when available:
-
-```bash
-tmp_npmrc=/tmp/domain-model-kit-npmrc
-printf 'registry=https://registry.npmjs.org/\nauth-type=web\n' > "$tmp_npmrc"
-npm adduser --auth-type=web --userconfig "$tmp_npmrc"
-npm publish --tag alpha --access public \
-  --userconfig "$tmp_npmrc" \
-  --otp "$(op item get h746mmr2yvbhnml327px3cabom --account codeva.1password.com --otp)"
-```
-
-Never print npm tokens or OTP values. If the `op` item is unavailable, ask the user to authenticate.
-
-## Workflow
-
-1. Read the relevant source, tests, and README section before editing.
-2. Keep edits scoped to the adapter or behavior being changed.
-3. Update tests before or alongside API changes.
-4. Update README and `examples` when the public usage changes.
-5. Run the relevant validation commands and report exactly what passed or failed.
+- Keep domain methods on aggregates, not in controllers or persistence adapters.
+- Record events for meaningful state changes, not for every property assignment.
+- Keep event payloads stable and serializable.
+- Keep persist handlers narrow: they persist accepted event classes.
+- Keep transaction and infrastructure policy outside this package's primitives.
+- Use one adapter consistently inside a bounded context.
+- Let generated `save(...)` dispatch recorded events instead of hand-writing repository save forests.
