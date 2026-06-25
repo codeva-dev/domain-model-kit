@@ -1,24 +1,33 @@
 ---
 name: domain-model-kit
-description: Use @codeva-dev/domain-model-kit in a TypeScript application. Use when modeling domains with value objects, entities, aggregate roots, domain events, repositories, persist handlers, or domain errors using the package's pure, neverthrow, or Effect adapters.
+description: Domain modeling with @codeva-dev/domain-model-kit. Use when adding or reviewing TypeScript aggregate roots, domain events, repositories, persist handlers, domain errors, or pure/neverthrow/effect adapter usage.
 ---
 
 # Domain Model Kit
 
-## What This Skill Is For
+Use `@codeva-dev/domain-model-kit` to build an event-first model: aggregate methods make business decisions, record domain events, and repositories dispatch those events through generated `save(...)`.
 
-Use `@codeva-dev/domain-model-kit` to build explicit domain models:
+It is not an ORM, transaction manager, outbox adapter, application framework, or event-sourcing framework.
 
-- aggregate methods make business decisions
-- aggregate roots record domain events
-- repositories dispatch recorded events through generated `save(...)`
-- persist handlers translate events to storage, outbox rows, projections, or other infrastructure writes
+## Process
 
-Do not use it as an ORM, application framework, transaction manager, outbox adapter, or full event-sourcing framework.
+1. Pick exactly one adapter for the bounded context.
 
-## Choose One Adapter
+   Completion criterion: every imported primitive in the model comes from the same subpath: `/pure`, `/neverthrow`, or `/effect`.
 
-Use one adapter consistently inside a bounded context:
+2. Model the write boundary event-first.
+
+   Completion criterion: every state-changing aggregate method either records a meaningful domain event or has an explicit reason not to.
+
+3. Wire persistence through handlers, not repository save methods.
+
+   Completion criterion: every persisted event class is accepted by at least one persist handler, and repositories use generated `save(...)` for dispatch.
+
+4. Keep infrastructure outside the domain model.
+
+   Completion criterion: HTTP, auth, transaction, retry, logging, queue, and DB policy live in application/infrastructure code; persist handlers only translate accepted events to writes.
+
+## Adapter Choice
 
 ```ts
 import { AggregateRoot, DomainEvent, Repository } from "@codeva-dev/domain-model-kit/pure"
@@ -26,47 +35,22 @@ import { AggregateRoot, DomainEvent, Repository } from "@codeva-dev/domain-model
 import { AggregateRoot, DomainEvent, Repository } from "@codeva-dev/domain-model-kit/effect"
 ```
 
-- `pure`: direct values, zod schemas, expected failures as thrown errors.
+- `pure`: zod schemas, direct values, expected failures as thrown errors.
 - `neverthrow`: zod schemas, expected failures as `Result`.
 - `effect`: Effect Schema, Effect failures, services, layers, and dependency context.
 
-Do not mix classes from different adapters in the same model.
+Do not mix adapter classes in one model.
 
-## Domain Modeling Flow
+## Save Contract
 
-Build write models in this order:
+`Repository.save(aggregate)` snapshots recorded events, dispatches matching events to persist handlers in order, and clears aggregate events only after every handler succeeds.
 
-1. Define value objects for validated immutable values.
-2. Define domain events for meaningful business state changes.
-3. Define entities and aggregate roots for identity and consistency boundaries.
-4. Put behavior on aggregate methods.
-5. Record domain events inside aggregate methods.
-6. Define persist handlers for accepted event classes.
-7. Define repositories with generated `save(...)` plus custom load/query methods.
-8. Keep HTTP, auth, transactions, retries, logging, queues, and DB policy outside the domain model.
+- Zero events: no-op success.
+- Handler failure: events remain on the aggregate.
+- Custom persistence reads/queries: add repository methods.
+- Custom event dispatch: do not override `save(...)`.
 
-The usual application write flow:
-
-1. Open an application-level transaction boundary.
-2. Load the aggregate and read data needed for the rule.
-3. Call aggregate methods.
-4. Call `repository.save(aggregate)` inside the same boundary.
-5. Let persist handlers write storage/outbox/projection changes.
-
-## Save Semantics
-
-`Repository.save(aggregate)`:
-
-- snapshots recorded domain events
-- dispatches matching events to persist handlers in order
-- calls each handler with accepted events in batch
-- clears aggregate events only after all handlers succeed
-- leaves events on the aggregate if persistence fails
-- is a no-op success when there are no events
-
-Do not override generated `save(...)`. Add custom repository methods for reads or application-specific queries.
-
-## Adapter Notes
+## Pure And Neverthrow Shape
 
 Pure and neverthrow use class factories:
 
@@ -77,7 +61,16 @@ class OrderPersistHandler extends PersistHandler.Class({ accepts, handle }) {}
 class OrderRepository extends Repository.Class({ dbContext, persistHandlers }) {}
 ```
 
-Effect uses class-first services:
+Rules:
+
+- Use zod schemas for payload/value validation.
+- Pass handler instances to `persistHandlers`.
+- In pure, expected failures may throw.
+- In neverthrow, expected failures should stay in `Result`.
+
+## Effect Shape
+
+Effect uses class-first services. Import Effect primitives from `effect`, not from this package.
 
 ```ts
 import { Effect, Schema } from "effect"
@@ -97,29 +90,13 @@ class OrderPersistHandler extends PersistHandler.Service<OrderPersistHandler>()(
 class OrderRepository extends Repository.Service<OrderRepository>()("OrderRepository", {
   persistHandlers: [OrderPersistHandler],
   dependencies: [OrderDb.Default, OrderPersistHandler.Default],
-}) {
-  findById(id: OrderId) {
-    return Effect.gen(function* () {
-      const db = yield* OrderDb
-      // load aggregate
-    })
-  }
-}
+}) {}
 ```
 
-Effect rules:
+Rules:
 
-- Import `Effect`, `Schema`, and other Effect primitives from `effect`, not from this package.
-- `persistHandlers` are service tags such as `[OrderPersistHandler]`, not instances.
-- Put `handle` in the `PersistHandler.Service` definition object when event inference should come from `accepts`.
+- `persistHandlers` contains service tags such as `[OrderPersistHandler]`, not instances.
+- Put `handle` in the `PersistHandler.Service` definition when event types should be inferred from `accepts`.
 - Resolve DB, transaction, request context, and other services inside the returned `Effect`.
-- Use `DomainError.Class(...)` for expected domain/application failures; keep infrastructure/decode/runtime failures out of public domain failure DTOs.
-
-## Checklist
-
-- Keep domain behavior on aggregates.
-- Record events for meaningful business changes, not every assignment.
-- Keep event payloads stable and serializable.
-- Keep persist handlers narrow and event-focused.
-- Keep transaction and infrastructure policy outside the package primitives.
-- Use generated `save(...)` instead of hand-written repository save method forests.
+- Use `DomainError.Class(...)` for expected domain/application failures.
+- Keep infrastructure, decode, and runtime layer failures out of public domain failure DTOs.
