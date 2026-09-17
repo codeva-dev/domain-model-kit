@@ -2,7 +2,7 @@
 
 Domain encapsulation and domain-event persistence toolkit for TypeScript.
 
-Current status: alpha package. The package is published, tested, and usable for feedback-driven adoption, but the public API should still be treated as unstable until `1.0.0`.
+Current release: `0.1.0`, the first non-prerelease version. Until `1.0.0`, minor releases may include breaking API changes.
 
 ## 1. Common Model
 
@@ -24,7 +24,7 @@ The domain model becomes the stable center of the application. Storage, queues, 
 ### Install
 
 ```bash
-npm install @codeva-dev/domain-model-kit@alpha
+npm install @codeva-dev/domain-model-kit
 ```
 
 The repository root is the package root, so a specific GitHub revision can also be installed without an npm publish:
@@ -195,11 +195,11 @@ The examples workspace depends on the root package through `file:..` and imports
 Releases use standard npm version management from the root package:
 
 ```bash
-npm version prerelease --preid alpha
-npm publish --tag alpha --access public
+npm version patch
+npm publish --tag latest --access public
 ```
 
-The convenience scripts are:
+For alpha releases and package inspection, the convenience scripts are:
 
 ```bash
 npm run version:alpha
